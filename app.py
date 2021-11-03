@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 
 
-df = st.cache(pd.read_excel)(r'\Users\MRachuk\PycharmProjects\proectExcel\fileTable.xlsx', 0)
+df = st.cache(pd.read_excel)(r'fileTable.xlsx', 0)
 
 clubs = st.sidebar.multiselect('Сегмент боргу?', df['Сегмент боргу'].unique())
 nationalities = st.sidebar.multiselect('К-ть перевірених ІПН по безкоштовній перевірці?',
