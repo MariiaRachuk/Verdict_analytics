@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly_express as px
+import plotly.express as px
 import input_sql
 pivot = (input_sql.table)
 df = st.cache(pd.read_excel)(r'\Users\MRachuk\PycharmProjects\proectExcel\fileTable.xlsx', 0)
