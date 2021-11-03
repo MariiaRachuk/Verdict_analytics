@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-pivot = (input_sql.table)
+
 df = st.cache(pd.read_excel)(r'\Users\MRachuk\PycharmProjects\proectExcel\fileTable.xlsx', 0)
 
 clubs = st.sidebar.multiselect('Сегмент боргу?', df['Сегмент боргу'].unique())
@@ -12,7 +12,6 @@ nationalities = st.sidebar.multiselect('К-ть перевірених ІПН п
 new_df = df[(df['Сегмент боргу'].isin(clubs))
                          & (df['К-ть перевірених ІПН по безкоштовній перевірці'].isin(nationalities))]
 # write dataframe to screen
-st.write(pivot)
 
 st.write(df)
 
