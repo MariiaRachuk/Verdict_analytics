@@ -1,24 +1,12 @@
 import sys
-import pyodbc
 import pandas as pd
 from itertools import zip_longest
-from matplotlib import pyplot as plt
-
+import inputing
 global df
 sys.setrecursionlimit(5000)
 
-def getConnection():
-    server = '10.1.32.56'
-    database = 'Collect'
-    username = 'sqlbot'
-    password = '''9"BgB4J2'''
-    connection = pyodbc.connect('Driver={SQL Server};'f'Server='
-                                f'' + server + ';DATABASE=' + database
-                                + ';UID=' + username + ';PWD=' + password)
-    return connection
+dbCursor = inputing.dbCursor()
 
-
-dbCursor = getConnection().cursor()
 requestString = """ select distinct uclcon.INN ,
 case when borg.sum_borg < 30000 then '0 - 30 000'
 when borg.sum_borg < 50000 then '30 000 - 50 000'
@@ -483,64 +471,75 @@ where c.id in (4899	,
 81591	))as zam2 on convert(nvarchar(max), d.docname)	= zam2.number
 where ed.Term	>= GETDATE() and case when  isnull(zam1.zam, zam2.number ) is null then 0 else 1 end >=1)as vl2)as zam_all on  uclcon.INN = zam_all.INN collate Cyrillic_General_CI_AS
 where (stl.Name is null or stl.Name = 'В работе Залогов') and r.IsActual = 1 and r.TypeId = 632263 and uclcon.INN <> '' """
-df = pd.read_sql_query(requestString, getConnection())
 
-dbCursor.execute(requestString)
+df = pd.read_sql_query(requestString, inputing.getConnection())
+dbCursor.execute(requestString).fetchall()
 
+# cat_size_order = CategoricalDtype(
+#     ['0 - 30 000', '30 000 - 50 000', '50 000 - 100 000','100 000 - 250 000',
+#                              '250 000 - 500 000', '500 000+'],
+#     ordered=True
+# )
+# df['Сегмент боргу'] = df['Сегмент боргу'].astype(cat_size_order)
+# df.sort_values('Сегмент боргу')
+ipoteca = [row for row in df['К-ть ІПН з майном в іпотеці']]
 
-# def normalization(funk):
-#     def wrapper(*args, **kwargd):
-#         funk(*args, **kwargd)
-#         normalized = [k + f for k, f in zip_longest(addingColumns(x,y), addingColumns(x,y), fillvalue=0)]
-#         for key, value in enumerate(normalized):
-#             if value < 1:
-#                 normalized[key] = 0
-#             else:
-#                 normalized[key] = 1
-#
-#         return normalized
-#
-#     return wrapper
-#
-#
-# @normalization
-# def addingColumns(column_name1, column_name2):
-#     global df
-#     property_mortgage = [int(row) for row in df[column_name1]]
-#     property_extra = [int(row) for row in df[column_name2]]
-#     return property_mortgage, property_extra
-
-a = [int(row) for row in df['К-ть ІПН з майном в іпотеці']]
-b = [int(row) for row in df['К-ть ІПН з додатковим майном']]
-
-c = [x + y for x, y in zip_longest(a, b, fillvalue=0)]
-for key, value in enumerate(c):
+extra_property = [row for row in df['К-ть ІПН з додатковим майном']]
+property_all = [x + y for x, y in zip_longest(ipoteca, extra_property, fillvalue=0)]
+for key, value in enumerate(property_all):
     if value < 1:
-        c[key] = 0
+        property_all[key] = 0
     else:
-        c[key] = 1
-# a = addingColumns('К-ть ІПН з майном в іпотеці', 'К-ть ІПН з додатковим майном')
+        property_all[key] = 1
+
+inputing.adding_to_table(df, 'К-ть ІПН з майном', property_all)
+fre3 = [int(row) for row in df['К-ть ІПН з майном']]
+inputing.adding_to_table(df, 'К-ть ІПН з майном', fre3)
+
+vp_type_table = inputing.addingfromExcel(file=r'\\fs250\Documents repository DOP\Analytics\LEGAL\VHoch\Звіти\Звіт по іпн.xlsx',
+                              sheetName='Полотно_ІПН', column='Тип ВП')
+
+vp_type = [str(row) for row in vp_type_table]
+# listMask = []
+# for item in borg:
+#     if item == 0:
+#         listMask.append(0)
+#     else:
+#         listMask.append(1)
+
+free_check_table = df['К-ть перевірених ІПН по безкоштовній перевірці']
+
+free_check = [int(row) for row in free_check_table]
+inputing.adding_to_table(df, 'К-ть перевірених ІПН по безкоштовній перевірці', free_check)
+
+inputing.adding_to_table(df, ' К-ть ІПН з платною перевіркою за адресою',
+                         inputing.addingfromExcel(file=r'\\fs250\Documents repository DOP\Analytics\LEGAL\VHoch\Звіти\Звіт по іпн.xlsx',
+                                                  sheetName='Полотно_ІПН',
+                                                  column=' К-ть ІПН з платною перевіркою за адресою'))
 
 
-def adding_to_table(nameColumn, fileAdd):
-    global df
-    df[nameColumn] = pd.Series(fileAdd)
-    return df
+inputing.adding_to_table(df, 'Активне АСВП', inputing.addingfromExcel(file=r'\\fs250\Documents repository DOP\Analytics\LEGAL\VHoch\Звіти\Звіт по іпн.xlsx',
+                                                                      sheetName='Полотно_ІПН',
+                                                                      column='Активне АСВП'))
+inputing.adding_to_table(df, 'Тип ВП', vp_type)
 
 
-propertyAll = adding_to_table('К-ть ІПН з майном', c)
 
 
-def addingfromExcel(file='\отчеты\Звіт по іпн.xlsx', sheetName='Полотно_ІПН',
-                    column=' К-ть ІПН з платною перевіркою за адресою'):
-    excel_data_df = pd.read_excel(file, sheet_name=sheetName)
-    listINN = excel_data_df[column].tolist()
-    return listINN
+pivot_segment = df.groupby('Сегмент боргу').agg({'INN': ['count'],
+                                         'К-ть правильних ІПН': ['sum'],
+                                         'К-ть перевірених ІПН по безкоштовній перевірці': ['sum'],
+                                         'К-ть ІПН з майном по безкоштовній перевірці': ['sum'],
+                                         ' К-ть ІПН з майном на Мирній Україні': ['sum'],
+                                         'К-ть в Донецька/Луганська обл': ['sum'],
+                                         ' К-ть ІПН з платною перевіркою за адресою': ['sum'],
+                                         'К-ть завантажених ІПН з платною перевіркою за адресою': ['sum'],
+                                                 'К-ть ІПН з майном': ['sum'],
+                                         'К-ть ІПН з майном в іпотеці': ['sum'],
+                                         'К-ть ІПН з додатковим майном': ['sum']
+                                         })
 
-
-adding_to_table(' К-ть ІПН з платною перевіркою за адресою', addingfromExcel())
-
-table = df.groupby('Сегмент боргу').agg({'INN': ['count'],
+pivot_active_vd = df.groupby(['Сегмент боргу', 'К-ть ІПН з діючим ВД']).agg({'INN': ['count'],
                                          'К-ть правильних ІПН': ['sum'],
                                          'К-ть перевірених ІПН по безкоштовній перевірці': ['sum'],
                                          'К-ть ІПН з майном по безкоштовній перевірці': ['sum'],
@@ -550,20 +549,44 @@ table = df.groupby('Сегмент боргу').agg({'INN': ['count'],
                                          'К-ть завантажених ІПН з платною перевіркою за адресою': ['sum'],
                                          'К-ть ІПН з майном': ['sum'],
                                          'К-ть ІПН з майном в іпотеці': ['sum'],
-                                         'К-ть ІПН з додатковим майном': ['sum']
-                                         })
-print(table)
+                                         'К-ть ІПН з додатковим майном': ['sum']})
 
-table.plot(
-    kind='bar',
-    figsize=(10, 7),
-    title='Сегмент')
-plt.show()
+pivot_changed_vd = df.groupby(['Сегмент боргу', 'К-ть ІПН з  діючим ВД та заміненою стороною']).agg({'INN': ['count'],
+                                         'К-ть правильних ІПН': ['sum'],
+                                         'К-ть перевірених ІПН по безкоштовній перевірці': ['sum'],
+                                         'К-ть ІПН з майном по безкоштовній перевірці': ['sum'],
+                                         ' К-ть ІПН з майном на Мирній Україні': ['sum'],
+                                         'К-ть в Донецька/Луганська обл': ['sum'],
+                                         ' К-ть ІПН з платною перевіркою за адресою': ['sum'],
+                                         'К-ть завантажених ІПН з платною перевіркою за адресою': ['sum'],
+                                         'К-ть ІПН з майном': ['sum'],
+                                         'К-ть ІПН з майном в іпотеці': ['sum'],
+                                         'К-ть ІПН з додатковим майном': ['sum']})
+
+pivot_active_asvp = df.groupby(['Сегмент боргу', 'Активне АСВП']).agg({'INN': ['count'],
+                                         'К-ть правильних ІПН': ['sum'],
+                                         'К-ть перевірених ІПН по безкоштовній перевірці': ['sum'],
+                                         'К-ть ІПН з майном по безкоштовній перевірці': ['sum'],
+                                         ' К-ть ІПН з майном на Мирній Україні': ['sum'],
+                                         'К-ть в Донецька/Луганська обл': ['sum'],
+                                         ' К-ть ІПН з платною перевіркою за адресою': ['sum'],
+                                         'К-ть завантажених ІПН з платною перевіркою за адресою': ['sum'],
+                                         'К-ть ІПН з майном': ['sum'],
+                                         'К-ть ІПН з майном в іпотеці': ['sum'],
+                                         'К-ть ІПН з додатковим майном': ['sum']})
+
+pivot_type_vp = df.groupby(['Сегмент боргу', 'Тип ВП']).agg({'INN': ['count'],
+                                         'К-ть правильних ІПН': ['sum'],
+                                         'К-ть перевірених ІПН по безкоштовній перевірці': ['sum'],
+                                         'К-ть ІПН з майном по безкоштовній перевірці': ['sum'],
+                                         ' К-ть ІПН з майном на Мирній Україні': ['sum'],
+                                         'К-ть в Донецька/Луганська обл': ['sum'],
+                                         ' К-ть ІПН з платною перевіркою за адресою': ['sum'],
+                                         'К-ть завантажених ІПН з платною перевіркою за адресою': ['sum'],
+                                         'К-ть ІПН з майном': ['sum'],
+                                         'К-ть ІПН з майном в іпотеці': ['sum'],
+                                         'К-ть ІПН з додатковим майном': ['sum']})
 
 
-def to_excel(filename='fileTable.xlsx'):
-    global df
-    excelfile = df.to_excel(filename)
-    print('File written')
-    return excelfile
-to_excel()
+# # inputing.plot(nameCol='Сегмент', table=table4)
+# inputing.to_excel(df, filename='fileTable.xlsx')
